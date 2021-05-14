@@ -6,7 +6,7 @@ import networkx
 from tqdm import tqdm 
 from numpy import random
 
-
+#This is a comment for a commit
 class RandomWalk:
     def __init__(self,N,M=None,p = None, s= None):
         """
