@@ -62,7 +62,7 @@ class RandomWalk:
                 basis function phi_k,i(x_k)
         ********** Possibly should be in examples.py ****************
         '''
-        #TODO ### Is this problem-specific? Should it be in the RandomWalk class? 
+        #TODO ### Is this problem-specific? Should it be in the RandomWalk class? Yes
         pass
 
 class sOED:
