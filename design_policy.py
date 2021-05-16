@@ -6,7 +6,16 @@ import networkx
 from tqdm import tqdm 
 from numpy import random
 
-#This is a comment for a commit
+# HELPER FUNCTIONS 
+def sample_simplex(dimension, n_points):
+    return np.random.dirichlet([1]*dimension, size = n_points)
+
+
+def dKL(prior, posterior):
+    return entropy(posterior, prior, base = 2)
+
+# END HELPER FUNCTIONS 
+
 class RandomWalk:
     def __init__(self,N,M=None,p = None, s= None):
         """
@@ -30,10 +39,11 @@ class RandomWalk:
         if p is None: 
             p = random.rand(N)
             p = p/sum(p)
+            self.p = p
         else: self.p = p 
 
         if s is None: 
-            self.s = np.choice(N,1,p=self.p)
+            self.s = random.choice(N,1,p=self.p)
         else: self.s = s
 
         self.state = self.s # Current state
@@ -46,48 +56,133 @@ class RandomWalk:
         '''
         Take one step and update attributes
         '''
-        #TODO
-        pass
+        q = self.M[self.state,:]
+        self.state = random.choice(N,1,p = q)
     
+    def set_state(self,s):
+        '''
+        Sets the state of the RW
+        '''
+        self.state = s
+
     def observe(self,i):
         '''
         Returns observation of state i
         '''
-        #TODO
-        pass
+        if i == self.state: return 1
+        else: return 0
     
-    def get_phi(self,k,i,x_k):
-        '''
-        Takes in index k for experiment number, a function taking index k for the experiment number, i for the basis index, and current belief x_k to evaluate and returns the result of the 
-                basis function phi_k,i(x_k)
-        ********** Possibly should be in examples.py ****************
-        '''
-        #TODO ### Is this problem-specific? Should it be in the RandomWalk class? Yes
-        pass
+    # def get_phi(self,k,i,x_k):
+    #     '''
+    #     Takes in index k for experiment number, a function taking index k for the experiment number, i for the basis index, and current belief x_k to evaluate and returns the result of the 
+    #             basis function phi_k,i(x_k)
+    #     ********** Possibly should be in examples.py ****************
+    #     '''
+    #     ### Is this problem-specific? Should it be in the RandomWalk class? Yes
+    #     pass
 
 class sOED:
-    def __init__(self,N,pi_explore,L,R,T,get_phi,m,p):
+    def __init__(self,N,L,T,p,RW,S = 50):
         '''
         Initializes a sequential optimal experiment design with the following variables: 
-            N: number of experiments
+            N: number of states (nodes)
             get_phi: a function taking index k for the experiment number, i for the basis index, and current belief x_k to evaluate and returns the result of the 
                 basis function phi_k,i(x_k)
-            L: number of policy updates
-            R: number of exploration trajectories
-            T: number of exploitation trajectories 
-            m: number of states (discrete)
+            L: number of value/policy updates
+            T: number of experiments (discrete)
             p: prior beliefs over states
             pi_explore: exploration policy 
+            S: number of belief states in discretization
         '''
         self.N = N
         self.L = L
-        self.R = R
         self.T = T
-        self.m = m
-        self.p = p
-        self.xb = p # Current beliefs about the world
-        self.pi_expore = pi_explore #TODO: what is pi_explore practically????
+        self.prior = p
+        self.S = S
+        self.values = random.rand((S,T))
+        self.samples = sample_simplex(self.N,S)
+        self.RW = RW # A RW object passed in to sOED
+
+    def reward(self,k, xk): 
+        '''
+        *** for now we are assuming 0 stage reward so the reward does not depend on the observation directly
+        prior: vector over m states
+        outputs: scalar indicating reward from belief xk at experiment k
+        xk is belief at experiment k
+        '''
         
+        if k < self.T-1:
+            return 0
+
+        # Ptest = experiment@prior
+        # Posterior = np.divide(np.multiply(experiment, prior),Ptest.reshape(-1,1))
+        return sum([self.prior[i]*dKL(self.prior, xk[i,:]) for i in range(self.N)])
+    
+    def posterior(self,prior,i,yi): 
+        '''
+        Computes posterior belief given the prior belief, the state i measured, and the observation yi
+        '''
+        if yi == 1: 
+            p = np.zeros(self.N)
+            p[i] = 1
+            return p
+        else: 
+            #TODO?
+            # How to update to posterior? Rn just zeroing out zero observation and renormalizing
+            p = prior
+            p[i] = 0
+            p = p/np.linalg.norm(p)
+            return p
+
+    def propagate_belief(self,posterior):
+        '''
+        given a posterior belief (after observation), propagates belief using the RW dynamics 
+        '''
+        M = self.RW.get_M()
+        F = M.T@posterior
+        return F
+
+    def get_NN_index(self,dist):
+        '''
+        Takes probability distribution dist and returns the index of self.samples that is closest
+        '''
+        pass
+
+    def value_iter(self): 
+        '''
+        Performs value iteration to learn optimal values at k^th experiment given belief xk
+        '''
+        # for l in range(L): # Number of rounds to perform
+        curr_vals = self.values
+        best_policy = np.zeros(self.S,self.T) # keeps track of the best measurements
+
+        for k in reversed(range(self.T)):
+            for s in range(self.S): # Iterating over the sampled belief states 
+                max_di = None
+                max_val = 0 # max value over all possible states to measure here
+                sample = self.samples[s]
+                for i in range(self.N): # Iterating over all possible states we could measure 
+                    post_1 = self.posterior(sample,i,1)
+                    post_0 = self.posterior(sample,i,0)
+                    exp_val = None
+                    if k == self.T - 1:
+                        exp_val = sample[i](self.reward(k,post_1)) + (1-sample[i])(self.reward(post_0))
+                    else:
+                        # Find NN of the posteriors to pair correct future value with each posterior
+                        NN_1 = self.get_NN_index(self,post_1)
+                        NN_0 = self.get_NN_index(self,post_0)
+                        exp_val = sample[i](self.reward(k,post_1)+curr_vals[NN_1,k+1]) + (1-sample[i])(self.reward(post_0)+curr_vals[NN_0,k+1])
+                    if exp_val> max_val:
+                        max_val = exp_val
+                        max_di = i
+                # Update values
+                curr_vals[s,k] = max_val
+                best_policy[s,k] = max_di
+        
+
+                        
+
+            
 
 
         
