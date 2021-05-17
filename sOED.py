@@ -30,72 +30,6 @@ def Random_walk_dynamics(G):
     return aux/aux.sum(axis=1, keepdims=True)
 # END HELPER FUNCTIONS 
 
-class RandomWalk:
-    def __init__(self,N,M=None,p = None, s= None):
-        """
-        Initializes a random walk with the following variables: 
-            N: number of nodes
-            M: transition matrix (if not entered, then generated randomly)
-            p: prior distribution over nodes
-            s: initial state (if not given, randomly chosen according to p)
-        """
-        self.N = N
-        if M is None: 
-            M = random.rand(N,N)
-            A = random.randint(2,size = (N,N))
-            M = np.multiply(M,A) # Elementwise multiplication: makes some of M zero
-            M = M + np.diag(0.05*np.ones(N))
-            sum_rows = M.sum(axis = 1)
-            normed_M = M /sum_rows[:,np.newaxis]
-            self.M = normed_M
-        else: self.M = M
-
-        if p is None: 
-            p = random.rand(N)
-            p = p/sum(p)
-            self.p = p
-        else: self.p = p 
-
-        if s is None: 
-            self.s = random.choice(N,1,p=self.p)
-        else: self.s = s
-
-        self.state = self.s # Current state
-        self.t = 0 # Time step 
-    
-    def get_M(self):
-        return self.M
-    
-    def update(self):
-        """
-        Take one step and update attributes
-        """
-        q = self.M[self.state,:]
-        self.state = random.choice(self.N,1,p = q)
-    
-    def set_state(self,s):
-        """
-        Sets the state of the RW
-        """
-        self.state = s
-
-    def observe(self,i):
-        """
-        Returns observation of state i
-        """
-    
-        if i == self.state: return 1
-        else: return 0
-    
-    # def get_phi(self,k,i,x_k):
-    #     '''
-    #     Takes in index k for experiment number, a function taking index k for the experiment number, i for the basis index, and current belief x_k to evaluate and returns the result of the 
-    #             basis function phi_k,i(x_k)
-    #     ********** Possibly should be in examples.py ****************
-    #     '''
-    #     ### Is this problem-specific? Should it be in the RandomWalk class? Yes
-    #     pass
-
 class sOED:
     def __init__(self,N,L,T,p,RW,S = 50):
         """
@@ -206,34 +140,3 @@ class sOED:
         
 
                         
-
-# Example here: 
-#   
-N_nodes = 10
-T = 6
-G = nx.erdos_renyi_graph(N_nodes, .2)
-while not nx.is_connected(G):
-    G = nx.erdos_renyi_graph(N_nodes, .2)     
-trans_matrix = Random_walk_dynamics(G)
-prior = np.ones(N_nodes)/N_nodes # Uniform prior
-RW = RandomWalk(N_nodes,M = trans_matrix,p= prior)
-OED = sOED(N_nodes,1,T,prior,RW,S = 10)
-print(OED.value_iter())
-nx.draw(G)
-plt.show()
-
-
-        
-# To optimize: 
-"""
-We have a value function at each timestep based on the belief
-Value iteration/iterating Bellman's equation until convergence
-ow good everything is at each time step and indexed by number o f states and time, and our state space is discretized, 
-BIG Matrix: with all the discretized states and how good they are at each time: iterating/dynamic programming on this matrix
-Q: How to discretize the probability simplex: have to discretize st finding nearest neighbor is cheap 
-
-To discretize the probability simplex, we should sample instead (and maybe have them move apart? Lenard Jones potential)
-
-Alternately, policy iteration: see stackoverflow post that was shared
-
-"""
