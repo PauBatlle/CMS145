@@ -2,9 +2,20 @@ import numpy as np
 import math 
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-import networkx
+import networkx as nx
 from tqdm import tqdm 
+from scipy.spatial import KDTree
 from numpy import random
+from scipy.stats import entropy
+
+#TODO: 
+"""
+Main issues: 
+- Value iteration does not involve iteration? 
+- No way to verify solution as of yet- should create some visualizations
+- Need to extract policy from the value matrix 
+- Implemented Experiments are currently just a node picked to measure, not a matrix as in the .ipynb 
+"""
 
 # HELPER FUNCTIONS 
 def sample_simplex(dimension, n_points):
@@ -14,6 +25,9 @@ def sample_simplex(dimension, n_points):
 def dKL(prior, posterior):
     return entropy(posterior, prior, base = 2)
 
+def Random_walk_dynamics(G):
+    aux = np.array(nx.adjacency_matrix(G).todense())
+    return aux/aux.sum(axis=1, keepdims=True)
 # END HELPER FUNCTIONS 
 
 class RandomWalk:
@@ -53,22 +67,23 @@ class RandomWalk:
         return self.M
     
     def update(self):
-        '''
+        """
         Take one step and update attributes
-        '''
+        """
         q = self.M[self.state,:]
-        self.state = random.choice(N,1,p = q)
+        self.state = random.choice(self.N,1,p = q)
     
     def set_state(self,s):
-        '''
+        """
         Sets the state of the RW
-        '''
+        """
         self.state = s
 
     def observe(self,i):
-        '''
+        """
         Returns observation of state i
-        '''
+        """
+    
         if i == self.state: return 1
         else: return 0
     
@@ -83,25 +98,27 @@ class RandomWalk:
 
 class sOED:
     def __init__(self,N,L,T,p,RW,S = 50):
-        '''
+        """
         Initializes a sequential optimal experiment design with the following variables: 
-            N: number of states (nodes)
-            get_phi: a function taking index k for the experiment number, i for the basis index, and current belief x_k to evaluate and returns the result of the 
-                basis function phi_k,i(x_k)
-            L: number of value/policy updates
-            T: number of experiments (discrete)
-            p: prior beliefs over states
-            pi_explore: exploration policy 
-            S: number of belief states in discretization
-        '''
+        N: number of states (nodes)
+        get_phi: a function taking index k for the experiment number, i for the basis index, and current belief x_k to evaluate and returns the result of the 
+        basis function phi_k,i(x_k)
+        L: number of value/policy updates
+        T: number of experiments (discrete)
+        p: prior beliefs over states
+        pi_explore: exploration policy 
+        S: number of belief states in discretization
+        """
+    
         self.N = N
         self.L = L
         self.T = T
         self.prior = p
         self.S = S
-        self.values = random.rand((S,T))
+        self.values = random.rand(S,T)
         self.samples = sample_simplex(self.N,S)
         self.RW = RW # A RW object passed in to sOED
+        self.NNTree = KDTree(data= self.samples)
 
     def reward(self,k, xk): 
         '''
@@ -116,20 +133,21 @@ class sOED:
 
         # Ptest = experiment@prior
         # Posterior = np.divide(np.multiply(experiment, prior),Ptest.reshape(-1,1))
-        return sum([self.prior[i]*dKL(self.prior, xk[i,:]) for i in range(self.N)])
+        return dKL(self.prior,xk)
     
     def posterior(self,prior,i,yi): 
         '''
         Computes posterior belief given the prior belief, the state i measured, and the observation yi
         '''
+        epsilon = 0.0001
         if yi == 1: 
-            p = np.zeros(self.N)
+            p = np.ones(self.N)*epsilon
             p[i] = 1
-            return p
+            return p/np.linalg.norm(p)
         else: 
             #TODO?
             # How to update to posterior? Rn just zeroing out zero observation and renormalizing
-            p = prior
+            p = prior.copy()
             p[i] = 0
             p = p/np.linalg.norm(p)
             return p
@@ -146,15 +164,16 @@ class sOED:
         '''
         Takes probability distribution dist and returns the index of self.samples that is closest
         '''
-        pass
+        return self.NNTree.query(dist)[1]
 
     def value_iter(self): 
         '''
         Performs value iteration to learn optimal values at k^th experiment given belief xk
         '''
+        #TODO: why don't we need to iterate in rounds? what am I interpreting wrong here? seems deterministic given samples and prior
         # for l in range(L): # Number of rounds to perform
         curr_vals = self.values
-        best_policy = np.zeros(self.S,self.T) # keeps track of the best measurements
+        best_policy = np.zeros((self.S,self.T)) # keeps track of the best measurements
 
         for k in reversed(range(self.T)):
             for s in range(self.S): # Iterating over the sampled belief states 
@@ -166,23 +185,42 @@ class sOED:
                     post_0 = self.posterior(sample,i,0)
                     exp_val = None
                     if k == self.T - 1:
-                        exp_val = sample[i](self.reward(k,post_1)) + (1-sample[i])(self.reward(post_0))
+                        exp_val = sample[i]*(self.reward(k,post_1)) + (1-sample[i])*(self.reward(k,post_0))
                     else:
                         # Find NN of the posteriors to pair correct future value with each posterior
-                        NN_1 = self.get_NN_index(self,post_1)
-                        NN_0 = self.get_NN_index(self,post_0)
-                        exp_val = sample[i](self.reward(k,post_1)+curr_vals[NN_1,k+1]) + (1-sample[i])(self.reward(post_0)+curr_vals[NN_0,k+1])
+                        NN_1 = self.get_NN_index(self.propagate_belief(post_1))
+                        NN_0 = self.get_NN_index(self.propagate_belief(post_0))
+                        # print('i: ', i)
+                        # print('k: ', k)
+                        # print('NN_1: ', NN_1)
+                        # print('NN_0: ', NN_0)
+                        exp_val = sample[i]*(self.reward(k,post_1)+curr_vals[NN_1,k+1]) + (1-sample[i])*(self.reward(k,post_0)+curr_vals[NN_0,k+1])
                     if exp_val> max_val:
                         max_val = exp_val
                         max_di = i
                 # Update values
                 curr_vals[s,k] = max_val
                 best_policy[s,k] = max_di
+        self.values = curr_vals
+        return curr_vals
         
 
                         
 
-            
+# Example here: 
+#   
+N_nodes = 10
+T = 6
+G = nx.erdos_renyi_graph(N_nodes, .2)
+while not nx.is_connected(G):
+    G = nx.erdos_renyi_graph(N_nodes, .2)     
+trans_matrix = Random_walk_dynamics(G)
+prior = np.ones(N_nodes)/N_nodes # Uniform prior
+RW = RandomWalk(N_nodes,M = trans_matrix,p= prior)
+OED = sOED(N_nodes,1,T,prior,RW,S = 10)
+print(OED.value_iter())
+nx.draw(G)
+plt.show()
 
 
         
