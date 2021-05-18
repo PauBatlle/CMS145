@@ -23,7 +23,7 @@ def sample_simplex(dimension, n_points):
     return np.random.dirichlet([1]*dimension, size = n_points)
 
 
-def dKL(prior, posterior):
+def dKL(posterior, prior):
     return entropy(posterior, prior, base = 2)
 
 def Random_walk_dynamics(G):
@@ -32,16 +32,13 @@ def Random_walk_dynamics(G):
 # END HELPER FUNCTIONS 
 
 class sOED:
-    def __init__(self,N,T,p,RW,experiments,S):
+    def __init__(self,N,L,T,p,RW,experiments,S = 50,samples = None):
         """
         Initializes a sequential optimal experiment design with the following variables: 
         N: number of states (nodes)
-        get_phi: a function taking index k for the experiment number, i for the basis index, and current belief x_k to evaluate and returns the result of the 
-        basis function phi_k,i(x_k)
         L: number of value/policy updates
         T: number of experiments (discrete)
         p: prior beliefs over states
-        pi_explore: exploration policy 
         S: number of belief states in discretization
         """
         # I think we could make the variable names more expressive, otherwise I find it hard to keep track
@@ -53,7 +50,9 @@ class sOED:
         self.possible_experiments = experiments #A list of matrices of possible experimetns
         #Implicitly assuming for now that the same experiments are available at all timesteps 
         self.values = random.rand(S,T)
-        self.samples = sample_simplex(self.N,S)
+        if samples is None:
+            self.samples = sample_simplex(self.N,S)
+        else: self.samples = samples
         self.RW = RW # A RW object passed in to sOED
         self.NNTree = KDTree(data= self.samples)
 
@@ -69,8 +68,8 @@ class sOED:
         #
         #Ptest = experiment@prior
         #Posterior = np.divide(np.multiply(experiment, prior),Ptest.reshape(-1,1))
-        return dKL(self.prior,xk) 
-        
+        return dKL(xk,self.prior)
+    
 
     def posterior(self,prior,i,yi): 
         '''

@@ -22,7 +22,7 @@ def sample_simplex(dimension, n_points):
     return np.random.dirichlet([1]*dimension, size = n_points)
 
 
-def dKL(prior, posterior):
+def dKL(posterior, prior):
     return entropy(posterior, prior, base = 2)
 
 def Random_walk_dynamics(G):
@@ -70,9 +70,9 @@ class RandomWalk:
         """
         Take one step and update attributes
         """
-        q = self.M[self.state,:]
+        q = self.M[self.state,:][0]
         self.state = random.choice(self.N,1,p = q)
-    
+        return self.state
     def set_state(self,s):
         """
         Sets the state of the RW
