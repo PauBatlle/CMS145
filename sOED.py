@@ -32,7 +32,7 @@ def Random_walk_dynamics(G):
 # END HELPER FUNCTIONS 
 
 class sOED:
-    def __init__(self,N,L,T,p,RW,experiments,S = 50):
+    def __init__(self,N,T,p,RW,experiments,S):
         """
         Initializes a sequential optimal experiment design with the following variables: 
         N: number of states (nodes)
@@ -47,7 +47,6 @@ class sOED:
         # I think we could make the variable names more expressive, otherwise I find it hard to keep track
     
         self.N = N
-        self.L = L
         self.T = T
         self.prior = p
         self.S = S
@@ -65,22 +64,25 @@ class sOED:
         outputs: scalar indicating reward from belief xk at experiment k
         xk is belief at experiment k
         '''
-        
         if k < self.T-1:
             return 0
-
+        #
         #Ptest = experiment@prior
         #Posterior = np.divide(np.multiply(experiment, prior),Ptest.reshape(-1,1))
-        return dKL(self.prior,xk)
-    
+        return dKL(self.prior,xk) 
+        
 
     def posterior(self,prior,i,yi): 
         '''
-        Computes posterior belief given the prior belief, the state i measured, and the observation yi
+        Computes posterior belief given the prior belief, the experiment i performed, and the observation number yi \in {0, ..., |S|-1}
         '''
-        
+        experiment = self.possible_experiments[i] #|S|x|Θ| matrix
+        signals, N_world_states = experiment.nsignals, experiment.nstates
+        Ptest = (experiment.M)@prior
+        Posterior = np.divide(np.multiply(experiment.M, prior),Ptest.reshape(-1,1))
+        return Posterior[yi] 
 
-    def propagate_belief(self,posterior):
+    def propagate_dynamics(self,posterior):
         '''
         given a posterior belief (after observation), propagates belief using the RW dynamics 
         '''
@@ -98,26 +100,25 @@ class sOED:
         '''
         Performs value iteration to learn optimal values at k^th experiment given belief xk
         '''
-        #TODO: why don't we need to iterate in rounds? what am I interpreting wrong here? seems deterministic given samples and prior
-        # for l in range(L): # Number of rounds to perform
         curr_vals = self.values
         best_policy = np.zeros((self.S,self.T)) # keeps track of the best measurements
 
-        for k in reversed(range(self.T)):
+        for k in tqdm(reversed(range(self.T)), total = self.T):
             for s in range(self.S): # Iterating over the sampled belief states 
                 max_di = None
                 max_val = 0 # max value over all possible states to measure here
                 sample = self.samples[s]
-                for i in range(self.N): # Iterating over all possible states we could measure 
-                    post_1 = self.posterior(sample,i,1)
+                for i in range(self.N): # Iterating over all possible experiments we could perform 
+                    #In the future, generalize this to more than two outcomes                  
+                    post_1 = self.posterior(sample,i,1) #We probably don't have to do this calculation for all times?
                     post_0 = self.posterior(sample,i,0)
                     exp_val = None
                     if k == self.T - 1:
                         exp_val = sample[i]*(self.reward(k,post_1)) + (1-sample[i])*(self.reward(k,post_0))
                     else:
                         # Find NN of the posteriors to pair correct future value with each posterior
-                        NN_1 = self.get_NN_index(self.propagate_belief(post_1))
-                        NN_0 = self.get_NN_index(self.propagate_belief(post_0))
+                        NN_1 = self.get_NN_index(self.propagate_dynamics(post_1))
+                        NN_0 = self.get_NN_index(self.propagate_dynamics(post_0))
                         # print('i: ', i)
                         # print('k: ', k)
                         # print('NN_1: ', NN_1)
@@ -130,5 +131,5 @@ class sOED:
                 curr_vals[s,k] = max_val
                 best_policy[s,k] = max_di
         self.values = curr_vals
-        return curr_vals
+        return curr_vals, best_policy
         

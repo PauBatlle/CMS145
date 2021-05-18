@@ -11,7 +11,9 @@ from Experiment import *
 - Visualizations of choices/beliefs
 """
 #Example test, non-pytest version
-ex =  build_experiments_random_walk(2, 0.2, 0.9)
-assert np.allclose(ex[0].M,np.array([[0.2, 0.1],[0.8, 0.9]]))
-assert np.allclose(ex[1].M, np.array([[0.1, 0.2], [0.9, 0.8]]))
+ex =  build_experiments_random_walk(3,sensitivity=0.7, specificity=0.8)
+#print(ex[0].M)
+#print(ex[1].M)
+#print(ex[2].M)
+assert np.allclose(ex[1].M, np.array([[0.8, 0.3, 0.8],[0.2, 0.7, 0.2]]))
 

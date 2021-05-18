@@ -24,6 +24,6 @@ def build_experiments_random_walk(N_nodes, sensitivity, specificity ):
     for i in range(N_nodes):
         M = np.zeros((2,N_nodes))
         for k in range(N_nodes):
-            M[:,k] = [sensitivity, 1-sensitivity] if k == i else [1-specificity, specificity]
+            M[:,k] = [1-sensitivity, sensitivity] if k == i else [specificity, 1-specificity]
         exps.append(Experiment(M))
     return exps 
