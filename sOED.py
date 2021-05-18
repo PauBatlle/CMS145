@@ -17,7 +17,8 @@ Main issues:
 - Implemented Experiments are currently just a node picked to measure, not a matrix as in the .ipynb 
 """
 
-# HELPER FUNCTIONS 
+# HELPER FUNCTIONS
+#TODO: Make them part of classes
 def sample_simplex(dimension, n_points):
     return np.random.dirichlet([1]*dimension, size = n_points)
 
@@ -31,7 +32,7 @@ def Random_walk_dynamics(G):
 # END HELPER FUNCTIONS 
 
 class sOED:
-    def __init__(self,N,L,T,p,RW,S = 50):
+    def __init__(self,N,L,T,p,RW,experiments,S = 50):
         """
         Initializes a sequential optimal experiment design with the following variables: 
         N: number of states (nodes)
@@ -43,12 +44,15 @@ class sOED:
         pi_explore: exploration policy 
         S: number of belief states in discretization
         """
+        # I think we could make the variable names more expressive, otherwise I find it hard to keep track
     
         self.N = N
         self.L = L
         self.T = T
         self.prior = p
         self.S = S
+        self.possible_experiments = experiments #A list of matrices of possible experimetns
+        #Implicitly assuming for now that the same experiments are available at all timesteps 
         self.values = random.rand(S,T)
         self.samples = sample_simplex(self.N,S)
         self.RW = RW # A RW object passed in to sOED
@@ -65,33 +69,23 @@ class sOED:
         if k < self.T-1:
             return 0
 
-        # Ptest = experiment@prior
-        # Posterior = np.divide(np.multiply(experiment, prior),Ptest.reshape(-1,1))
+        #Ptest = experiment@prior
+        #Posterior = np.divide(np.multiply(experiment, prior),Ptest.reshape(-1,1))
         return dKL(self.prior,xk)
     
+
     def posterior(self,prior,i,yi): 
         '''
         Computes posterior belief given the prior belief, the state i measured, and the observation yi
         '''
-        epsilon = 0.0001
-        if yi == 1: 
-            p = np.ones(self.N)*epsilon
-            p[i] = 1
-            return p/np.linalg.norm(p,1)
-        else: 
-            #TODO?
-            # How to update to posterior? Rn just zeroing out zero observation and renormalizing
-            p = prior.copy()
-            p[i] = 0
-            p = p/np.linalg.norm(p,1)
-            return p
+        
 
     def propagate_belief(self,posterior):
         '''
         given a posterior belief (after observation), propagates belief using the RW dynamics 
         '''
         M = self.RW.get_M()
-        F = M.T@posterior
+        F = (M.T)@posterior
         return F
 
     def get_NN_index(self,dist):
@@ -138,5 +132,3 @@ class sOED:
         self.values = curr_vals
         return curr_vals
         
-
-                        
