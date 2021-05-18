@@ -73,7 +73,7 @@ class sOED:
 
     def posterior(self,prior,i,yi): 
         '''
-        Computes posterior belief given the prior belief, the experiment i performed, and the observation number yi \in {0, ..., |S|-1}
+        Computes posterior belief given the prior belief, the experiment i performed, and the observation number yi \in {0,1}
         '''
         experiment = self.possible_experiments[i] #|S|x|Θ| matrix
         signals, N_world_states = experiment.nsignals, experiment.nstates
@@ -101,7 +101,7 @@ class sOED:
         '''
         curr_vals = self.values
         best_policy = np.zeros((self.S,self.T)) # keeps track of the best measurements
-
+        all_vals = np.zeros((self.S,self.T,self.N))
         for k in tqdm(reversed(range(self.T)), total = self.T):
             for s in range(self.S): # Iterating over the sampled belief states 
                 max_di = None
@@ -123,6 +123,7 @@ class sOED:
                         # print('NN_1: ', NN_1)
                         # print('NN_0: ', NN_0)
                         exp_val = sample[i]*(self.reward(k,post_1)+curr_vals[NN_1,k+1]) + (1-sample[i])*(self.reward(k,post_0)+curr_vals[NN_0,k+1])
+                    all_vals[s,k,i] = exp_val
                     if exp_val> max_val:
                         max_val = exp_val
                         max_di = i
@@ -130,5 +131,5 @@ class sOED:
                 curr_vals[s,k] = max_val
                 best_policy[s,k] = max_di
         self.values = curr_vals
-        return curr_vals, best_policy
+        return curr_vals, best_policy, all_vals
         

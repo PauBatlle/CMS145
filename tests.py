@@ -40,7 +40,8 @@ experiments = build_experiments_random_walk(N,1,1)
 S = 3
 T = 2
 samples = np.array([[1,0,0],[0,1,0],[0,0,1]])
-sOED_test = sOED(N,1,T,np.ones(N)/N,RW_test,experiments,S = 3, samples = samples)
+sOED_test = sOED(N,T,np.ones(N)/N,RW_test,experiments,S = 3, samples = samples)
+print(sOED_test.posterior(samples[0],0,1))
 xk = np.array([0.8,0.1,0.1])
 assert sOED_test.reward(0,xk) == 0, "sOED intermediate reward incorrect"
 # TODO: final reward is dLK(prior || posterior) or vv? 
