@@ -32,7 +32,7 @@ def Random_walk_dynamics(G):
 # END HELPER FUNCTIONS 
 
 class sOED:
-    def __init__(self,N,L,T,p,RW,experiments,S = 50,samples = None):
+    def __init__(self,N,T,p,RW,experiments,S,samples = None):
         """
         Initializes a sequential optimal experiment design with the following variables: 
         N: number of states (nodes)
