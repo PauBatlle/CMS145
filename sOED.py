@@ -26,6 +26,28 @@ def sample_simplex(dimension, n_points):
 def dKL(posterior, prior):
     return entropy(posterior, prior, base = 2)
 
+def F(prior, posterior, betas = None):
+    """
+    Function F associated with Cost of Information
+    """
+    N = prior.shape[0]
+    if betas is None: 
+        betas = np.ones((N,N))
+    
+    return sum([betas[i,j]*posterior[i]/prior[i]*np.log(posterior[i]/prior[j]) for i in range(N) for j in range(N)])
+
+#TODO: write tests for F and CoI
+def CoI(prior,posteriors, post_probs, betas = None): 
+    """
+    Computes the cost of information
+    prior: prior belief
+    posteriors: list of possible posteriors that experiment would lead to
+    post_probs: probability of getting each posterior
+    """
+
+    N = prior.shape[0]
+    return sum([(F(posteriors[i],prior)-F(prior,prior))*post_probs[i] for i in range(N)])
+
 def Random_walk_dynamics(G):
     aux = np.array(nx.adjacency_matrix(G).todense())
     return aux/aux.sum(axis=1, keepdims=True)
@@ -56,20 +78,34 @@ class sOED:
         self.RW = RW # A RW object passed in to sOED
         self.NNTree = KDTree(data= self.samples)
 
-    def reward(self,k, xk): 
+    def reward(self,k, xk, alpha = 0, cost = 0, y=None, bonus = 0): 
         '''
         *** for now we are assuming 0 stage reward so the reward does not depend on the observation directly
         prior: vector over m states
         outputs: scalar indicating reward from belief xk at experiment k
         xk is belief at experiment k
+        alpha: weight between 0 and 1 of how much to put value on intermediate reward
+
         '''
-        if k < self.T-1:
-            return 0
-        #
-        #Ptest = experiment@prior
-        #Posterior = np.divide(np.multiply(experiment, prior),Ptest.reshape(-1,1))
-        return dKL(xk,self.prior)
+        if cost == 0: # Regular DKL reward
+            if k < self.T-1:
+                return alpha*dKL(xk,self.prior)
+        
+            #
+            #Ptest = experiment@prior
+            #Posterior = np.divide(np.multiply(experiment, prior),Ptest.reshape(-1,1))
+            return dKL(xk,self.prior)
     
+        if cost == 1: # Cost of information
+            if k< self.T -1: 
+                pass
+        
+        if cost == 2: # Reward for actually finding it
+            find  = 0
+            if y ==1 : find = bonus
+            if k < self.T-1:
+                return alpha*dKL(xk,self.prior) + bonus
+            else: return dKL(xk,self.prior) + bonus
 
     def posterior(self,prior,i,yi): 
         '''
@@ -95,7 +131,7 @@ class sOED:
         '''
         return self.NNTree.query(dist)[1]
 
-    def value_iter(self): 
+    def value_iter(self, alpha = 0, cost = 0, bonus = 0): 
         '''
         Performs value iteration to learn optimal values at k^th experiment given belief xk
         '''
@@ -113,7 +149,7 @@ class sOED:
                     post_0 = self.posterior(sample,i,0)
                     exp_val = None
                     if k == self.T - 1:
-                        exp_val = sample[i]*(self.reward(k,post_1)) + (1-sample[i])*(self.reward(k,post_0))
+                        exp_val = sample[i]*(self.reward(k,post_1,alpha = alpha)) + (1-sample[i])*(self.reward(k,post_0,alpha = alpha))
                     else:
                         # Find NN of the posteriors to pair correct future value with each posterior
                         NN_1 = self.get_NN_index(self.propagate_dynamics(post_1))
@@ -122,7 +158,7 @@ class sOED:
                         # print('k: ', k)
                         # print('NN_1: ', NN_1)
                         # print('NN_0: ', NN_0)
-                        exp_val = sample[i]*(self.reward(k,post_1)+curr_vals[NN_1,k+1]) + (1-sample[i])*(self.reward(k,post_0)+curr_vals[NN_0,k+1])
+                        exp_val = sample[i]*(self.reward(k,post_1, alpha = alpha, cost = cost, y = 1, bonus = bonus)+curr_vals[NN_1,k+1]) + (1-sample[i])*(self.reward(k,post_0, alpha = alpha, cost = cost,y=0, bonus = bonus)+curr_vals[NN_0,k+1])
                     all_vals[s,k,i] = exp_val
                     if exp_val> max_val:
                         max_val = exp_val
